@@ -1,0 +1,98 @@
+name: Rust CI/CD
+
+on:
+  push:
+    branches: [ "master" ]
+    tags:
+      - 'v*.*.*' # Trigger on version tags
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint_and_format:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run Clippy
+        run: cargo clippy -- -D warnings
+
+  test:
+    name: Test Suite
+    needs: lint_and_format
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run tests
+        run: cargo test
+
+  build_release_assets:
+    name: Build Release Assets
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: aionr2-linux-amd64
+            archive_ext: tar.gz
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: aionr2-macos-amd64
+            archive_ext: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: aionr2-windows-amd64
+            archive_ext: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Rust target
+        run: rustup target add ${{ matrix.target }}
+      - name: Build binary
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: Package for Linux/macOS
+        if: runner.os != 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar -czf ${{ matrix.artifact_name }}.${{ matrix.archive_ext }} aionr2
+          echo "ASSET_PATH=$(pwd)/${{ matrix.artifact_name }}.${{ matrix.archive_ext }}" >> $GITHUB_ENV
+          echo "ASSET_NAME=${{ matrix.artifact_name }}.${{ matrix.archive_ext }}" >> $GITHUB_ENV
+      - name: Package for Windows
+        if: runner.os == 'Windows'
+        run: |
+          cd target\${{ matrix.target }}\release
+          7z a ${{ matrix.artifact_name }}.${{ matrix.archive_ext }} aionr2.exe
+          echo "ASSET_PATH=$(pwd)\${{ matrix.artifact_name }}.${{ matrix.archive_ext }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "ASSET_NAME=${{ matrix.artifact_name }}.${{ matrix.archive_ext }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ env.ASSET_PATH }}
+
+  create_github_release:
+    name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build_release_assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: release-assets
+      - name: Create Release and Upload Assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME=${{ github.ref_name }}
+          gh release create "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --title "Release $TAG_NAME" --notes "Automated release for version $TAG_NAME" release-assets/*/*
