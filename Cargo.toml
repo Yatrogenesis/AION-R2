@@ -6,6 +6,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Gemini Systems Engineer"]
 description = "AION-R MCP server for AI inference and data analysis."
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 tokio = { version = "1.37", features = ["rt-multi-thread", "macros", "signal", "process", "io-std"] }
