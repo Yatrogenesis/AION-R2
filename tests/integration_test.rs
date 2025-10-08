@@ -52,19 +52,21 @@ async fn read_rpc_message(stdout: &mut (impl AsyncBufReadExt + Unpin)) -> Result
 
 // Helper to spawn the server process for testing
 async fn spawn_server(mock_server: &MockServer) -> Child {
-    // Ensure the binary is built
+    // Ensure the binary is built for the integration test
+    // Note: `cargo test` builds the main binary in the debug profile.
     let build_status = Command::new("cargo")
         .args(["build", "--bin", "aionr2"])
         .status()
         .await
-        .expect("Failed to build aionr2 binary");
-    assert!(build_status.success(), "Cargo build failed");
+        .expect("Failed to build aionr2 binary for testing");
+    assert!(build_status.success(), "Cargo build failed for testing");
 
+    let binary_name = if cfg!(windows) { "aionr2.exe" } else { "aionr2" };
     let binary_path = std::env::current_dir()
         .unwrap()
         .join("target")
         .join("debug")
-        .join("aionr2.exe"); // Assuming Windows
+        .join(binary_name);
 
     Command::new(binary_path)
         .env("AION_R_API_URL", &mock_server.uri())
