@@ -61,7 +61,11 @@ async fn spawn_server(mock_server: &MockServer) -> Child {
         .expect("Failed to build aionr2 binary for testing");
     assert!(build_status.success(), "Cargo build failed for testing");
 
-    let binary_name = if cfg!(windows) { "aionr2.exe" } else { "aionr2" };
+    let binary_name = if cfg!(windows) {
+        "aionr2.exe"
+    } else {
+        "aionr2"
+    };
     let binary_path = std::env::current_dir()
         .unwrap()
         .join("target")
